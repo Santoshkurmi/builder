@@ -19,38 +19,19 @@ pub struct SslConfig {
     pub certificate_path: String,
     pub certificate_key_path: String,
 }
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Clone, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum AuthType {
     Token,
     Address,
     Both,
 }
 
-impl std::str::FromStr for AuthType {
-    fn from_str(input: &str) -> AuthType {
-        match input {
-            "token" => Ok(AuthType::Token),
-            "address" => Ok(AuthType::Address),
-            "both" => Ok(AuthType::Both),
-            //_ => Err(()),
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Clone, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum AddressType {
     IP,
     Hostname,
-}
-
-impl std::str::FromStr for AddressType {
-    fn from_str(input: &str) -> AddressType {
-        match input {
-            "ip" => Ok(AddressType::IP),
-            "hostname" => Ok(AddressType::hostname),
-            //_ => Err(()),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -66,7 +47,7 @@ pub struct ProjectConfig {
     pub allow_multi_build: bool,
     pub max_pending_build: u32,
     pub base_endpoint_path: String,
-    pub api: ApiConfig,
+    pub auth: AuthConfig,
     pub build: BuildConfig,
 }
 
@@ -77,7 +58,8 @@ pub struct Payload {
     pub value: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Clone, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum PayloadType {
     Normal,
     Env,
@@ -86,13 +68,14 @@ pub enum PayloadType {
 }
 
 impl std::str::FromStr for PayloadType {
-    fn from_str(input: &str) -> PayloadType {
+    type Err = ();
+    fn from_str(input: &str) -> Result<PayloadType, Self::Err> {
         match input {
             "normal" => Ok(PayloadType::Normal),
             "env" => Ok(PayloadType::Env),
             "param" => Ok(PayloadType::Param),
             "file" => Ok(PayloadType::File),
-            //_ => Err(()),
+            _ => Err(()),
         }
     }
 }
@@ -103,7 +86,7 @@ pub struct BuildConfig {
     pub payload: Vec<Payload>,
     pub unique_build_key: String,
     pub on_success_failure: String,
-    pub on_success_error_payload: Vec<String>,
+    pub on_success_error_payload: Vec<Payload>,
     pub commands: Vec<CommandConfig>,
     #[serde(default)]
     pub run_on_success: Vec<CommandConfig>,
@@ -119,7 +102,7 @@ pub struct CommandConfig {
     pub payload: Vec<Payload>,
     #[serde(default)]
     pub on_error: String, // "abort", "continue"
-    #[serde(default = true)]
+    #[serde(default)]
     pub send_to_sock: bool,
 }
 
