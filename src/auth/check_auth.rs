@@ -10,13 +10,9 @@ use crate::models::{
 pub async fn is_authorized(
     req: &HttpRequest,
     state: web::Data<AppState>,
-    project_name: &str,
 ) -> bool {
-    let auth_config = if let Some(project_config) = state.config.projects.get(project_name) {
-        &project_config.auth
-    } else {
-        &state.config.auth
-    };
+    let auth_config = &state.config.auth;
+  
 
     match auth_config.auth_type {
         AuthType::Token => check_token_auth(req, auth_config),

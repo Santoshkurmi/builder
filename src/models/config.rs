@@ -1,6 +1,5 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
@@ -10,7 +9,7 @@ pub struct Config {
     pub log_path: String,
     pub ssl: SslConfig,
     pub auth: AuthConfig,
-    pub projects: HashMap<String, ProjectConfig>,
+    pub project: ProjectConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -46,8 +45,7 @@ pub struct AuthConfig {
 pub struct ProjectConfig {
     pub allow_multi_build: bool,
     pub max_pending_build: u32,
-    pub base_endpoint_path: String,
-    pub auth: AuthConfig,
+    // pub base_endpoint_path: String,
     pub build: BuildConfig,
 }
 

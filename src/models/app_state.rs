@@ -11,12 +11,14 @@ use tokio::sync::{
 #[derive(Clone)]
 pub struct AppState {
     pub config: Config,
-    pub build: Arc<Mutex<Option<BuildRequest>>>,
+    pub builds: BuildState,
     pub project_sender: broadcast::Sender<ChannelMessage>,
     pub build_sender: broadcast::Sender<ChannelMessage>,
     pub is_queue_running: Arc<Mutex<bool>>,
     pub running_command_child: Arc<Mutex<Option<tokio::process::Child>>>,
     pub is_terminated: Arc<Mutex<bool>>,
+    pub project_token: Option<String>,
+    pub project_logs: Vec<BuildLog>,
 }
 
 #[derive(Clone)]
@@ -26,10 +28,19 @@ pub struct BuildState {
     pub failed_history: Arc<Mutex<Vec<BuildProcess>>>,
 }
 
+impl  BuildState {
+    pub fn new() -> Self {
+        Self {
+            build_queue: Arc::new(Mutex::new(Vec::new())),
+            current_build: Arc::new(Mutex::new(None)),
+            failed_history: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct BuildRequest {
     pub id: String,
-    pub project_name: String,
     pub unique_id: String,
     pub payload: HashMap<String, serde_json::Value>,
     pub socket_token: String,
@@ -38,7 +49,6 @@ pub struct BuildRequest {
 // #[derive()]
 pub struct BuildProcess {
     pub id: String,
-    pub project_name: String,
     pub unique_id: String,
     pub status: Status,
     pub current_step: usize,
@@ -83,7 +93,10 @@ impl AppState {
             project_sender,
             build_sender,
             is_queue_running: Arc::new(Mutex::new(false)),
-            build: Arc::new(Mutex::new(None)),
+            builds: BuildState::new(),
+            project_token: None,
+            project_logs: Vec::new(),
         }
     }
 }
+
