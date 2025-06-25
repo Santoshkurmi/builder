@@ -42,11 +42,13 @@ impl  BuildState {
 pub struct BuildRequest {
     pub id: String,
     pub unique_id: String,
-    pub payload: HashMap<String, serde_json::Value>,
+    pub payload: HashMap<String, String>,
     pub socket_token: String,
 }
 
 // #[derive()]
+#[derive(Clone)]
+
 pub struct BuildProcess {
     pub id: String,
     pub unique_id: String,
@@ -57,6 +59,7 @@ pub struct BuildProcess {
     pub end_at: DateTime<Utc>,
     pub duration_seconds: u64,
     pub socket_token: String,
+    pub payload: HashMap<String, String>,
     pub logs: Vec<BuildLog>,
 }
 
@@ -71,8 +74,10 @@ pub struct BuildLog {
 #[derive(Serialize)]
 pub struct BuildResponse {
     pub message: String,
-    pub status: String,
-    pub payload: Option<serde_json::Value>,
+    pub status: Status,
+    pub token: Option<String>,
+    pub build_id: Option<String>,
+    // pub payload: Option<serde_json::Value>,
 }
 
 #[derive(Clone)]

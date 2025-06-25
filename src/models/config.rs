@@ -7,6 +7,7 @@ pub struct Config {
     pub port: u16,
     pub base_path: String,
     pub log_path: String,
+    pub enable_logs: bool,
     pub ssl: SslConfig,
     pub auth: AuthConfig,
     pub project: ProjectConfig,
@@ -45,6 +46,7 @@ pub struct AuthConfig {
 pub struct ProjectConfig {
     pub allow_multi_build: bool,
     pub max_pending_build: u32,
+    pub next_build_delay: u32,
     // pub base_endpoint_path: String,
     pub build: BuildConfig,
 }
@@ -98,10 +100,8 @@ pub struct CommandConfig {
     pub title: String,
     #[serde(default)]
     pub payload: Vec<Payload>,
-    #[serde(default)]
+    #[serde(default="default_on_error")]
     pub on_error: String, // "abort", "continue"
-    #[serde(default)]
-    pub send_to_sock: bool,
 }
 
 impl Config {
@@ -110,4 +110,8 @@ impl Config {
         let config: Config = toml::from_str(&content)?;
         Ok(config)
     }
+}
+
+fn default_on_error() -> String {
+    "abort".to_string()
 }

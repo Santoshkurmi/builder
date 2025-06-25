@@ -12,7 +12,6 @@ use crate::models::app_state::{AppState, ChannelMessage};
 |-----------------------------------------------------------------------
 |
 */
-#[get("/connect")]
 pub async fn connect_and_stream_ws(
     req: HttpRequest,
     stream: web::Payload,
@@ -32,9 +31,11 @@ pub async fn connect_and_stream_ws(
     let build_id = query.get(unique_build_key).clone(); 
     let token = query.get("token").clone(); 
    
-    if let None = build_id {
+    println!("Token: {:?}",token);
+    if let None = token {
         return Ok(HttpResponse::Unauthorized().body("Socket Token is Required"));
     }
+    // println!("Token: {:?}",token);
 
     if let None = build_id {
         return Ok(HttpResponse::Unauthorized().body(format!("No build id found with key {} ",unique_build_key)));

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize,PartialEq, Eq, PartialOrd, Ord)]
 pub enum Status {
     Error,
     Success,
@@ -8,9 +8,13 @@ pub enum Status {
     Building,
     Full,
     AlreadyBuilding,
+    AlreadyQueue,
     Aborted,
     NotFound,
     SomethingWentWrong,
+    Unauthorized,
+    MissingUniqueId,
+    MaxPending,
 }
 
 impl Status {
@@ -22,9 +26,13 @@ impl Status {
             Status::Building => "building",
             Status::Full => "full",
             Status::AlreadyBuilding => "already_building",
+            Status::AlreadyQueue => "already_queue",
             Status::Aborted => "aborted",
             Status::NotFound => "not_found",
             Status::SomethingWentWrong => "something_went_wrong",
+            Status::Unauthorized => "unauthorized",
+            Status::MissingUniqueId => "missing_unique_id",
+            Status::MaxPending => "max_pending",
         }
     } //as_str
 }
