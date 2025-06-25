@@ -54,14 +54,13 @@ pub struct ProjectConfig {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Payload {
     pub r#type: PayloadType,
-    pub key: String,
-    pub value: Option<String>,
+    pub key1: String,
+    pub key2: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone, Serialize)]
+#[derive(Debug, Deserialize, Clone, Serialize,PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum PayloadType {
-    Normal,
     Env,
     Param,
     File,
@@ -71,7 +70,6 @@ impl std::str::FromStr for PayloadType {
     type Err = ();
     fn from_str(input: &str) -> Result<PayloadType, Self::Err> {
         match input {
-            "normal" => Ok(PayloadType::Normal),
             "env" => Ok(PayloadType::Env),
             "param" => Ok(PayloadType::Param),
             "file" => Ok(PayloadType::File),

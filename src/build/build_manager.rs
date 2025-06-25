@@ -87,17 +87,25 @@ pub async fn build_manager(state: web::Data<AppState>) {
 
     }//loop forever(or until shutdown)
 
-    let mut queue = state.builds.build_queue.lock().await;
-    queue.clear();
+    {
+        let mut queue = state.builds.build_queue.lock().await;
+        queue.clear();
+    }
+ 
+    {
+        let mut is_queue_running = state.is_queue_running.lock().await;
+        *is_queue_running = false;
+    }
+    
+    {
+        let mut current_build = state.builds.current_build.lock().await;
+        *current_build = None;
+    }
 
-    let mut is_queue_running = state.is_queue_running.lock().await;
-    *is_queue_running = false;
+    
 
-    let mut current_build = state.builds.current_build.lock().await;
-    *current_build = None;
-
-    let mut build_queue = state.builds.build_queue.lock().await;
-    *build_queue = Vec::new();
+    // let mut build_queue = state.builds.build_queue.lock().await;
+    // *build_queue = Vec::new();
 
     println!("End of all builds");
 

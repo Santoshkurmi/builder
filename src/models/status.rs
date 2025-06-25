@@ -15,11 +15,15 @@ pub enum Status {
     Unauthorized,
     MissingUniqueId,
     MaxPending,
+    MissingPayload,
+    FileCreateFailed,
 }
 
 impl Status {
     pub fn as_str(&self) -> &'static str {
         match self {
+            Status::FileCreateFailed => "file_create_failed",
+            Status::MissingPayload => "missing_payload",
             Status::Error => "error",
             Status::Success => "success",
             Status::Pending => "pending",

@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use std::{collections::HashMap, sync::Arc};
 
-use crate::{auth::check_auth::is_authorized, build::build_manager::{self, build_manager}, helpers::utils::generate_token, models::{app_state::{AppState, BuildProcess, BuildRequest, BuildResponse, BuildState}, config::Config, status::Status}};
+use crate::{auth::check_auth::is_authorized, build::build_manager::{self, build_manager}, helpers::utils::{create_file_with_dirs_and_content, generate_token}, models::{app_state::{AppState, BuildProcess, BuildRequest, BuildResponse, BuildState}, config::{Config, PayloadType}, status::Status}};
 
 
 
@@ -37,7 +37,19 @@ pub async fn build_initialize(
         return HttpResponse::BadRequest().json(res);
     }
 
-    let guard = state.builds.current_build.lock().await;
+    for reqired_payload in &state.config.project.build.payload {
+        if ! payload.contains_key(&reqired_payload.key1) {
+            let res = BuildResponse{
+                message: format!("Missing payload key: {}", reqired_payload.key1),
+                status: Status::MissingPayload,
+                build_id: None,
+                token: None
+            };
+            return HttpResponse::BadRequest().json(res);
+        }//if key not found
+    }
+
+
 
     if state.config.project.max_pending_build == state.builds.build_queue.lock().await.len() as u32{
         let res = BuildResponse{
@@ -50,6 +62,8 @@ pub async fn build_initialize(
     }
 
     let mut is_already_running = false;
+    let guard = state.builds.current_build.lock().await;
+
     if let Some(current_build) = &*guard {
         if &current_build.unique_id == unique_id.unwrap()  {
             let res = BuildResponse{
@@ -80,6 +94,30 @@ pub async fn build_initialize(
         };
         return HttpResponse::Conflict().json(res);
     }
+
+
+    for reqired_payload in &state.config.project.build.payload {
+        if reqired_payload.r#type != PayloadType::File{
+            continue;
+        }//continue if not file
+        let file_path = if reqired_payload.key2.is_some() {
+            reqired_payload.key2.as_ref().unwrap()
+        } else {
+            reqired_payload.key1.as_str()
+        };
+
+        let create_path = create_file_with_dirs_and_content(file_path, payload.get(&reqired_payload.key1).unwrap().as_str());
+        if let Err(e) = create_path {
+            let res = BuildResponse{
+                message: format!("Failed to create payload file: {}", e),
+                status: Status::FileCreateFailed,
+                build_id: None,
+                token: None
+            };
+            return HttpResponse::BadRequest().json(res);
+        }
+        
+    }
    
 
     let new_token = generate_token(32);
@@ -95,6 +133,8 @@ pub async fn build_initialize(
     build_queue.push(build_state);
     drop(build_queue);
 
+
+
     if !*state.is_queue_running.lock().await{
 
 
@@ -109,5 +149,9 @@ pub async fn build_initialize(
         build_id: Some( id.to_string() ),
         status:if is_already_running {Status::Pending} else {Status::Building},
     };
+
+    
+
+
     HttpResponse::Ok().json(res)
 }

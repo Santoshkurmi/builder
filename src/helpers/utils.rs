@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -6,8 +7,8 @@ use reqwest::Client;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{ChildStderr, ChildStdout};
 use std::fs::{self, File};
-use std::io::Write;
-use std::path::PathBuf;
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
 use chrono::Local;
 use crate::models::app_state::ChannelMessage;
 use crate::models::app_state::{AppState, BuildLog};
@@ -21,6 +22,20 @@ pub fn generate_token(len: usize) -> String {
         .collect()
 }
 
+pub fn create_file_with_dirs_and_content(file_path: &str, content: &str) -> io::Result<()> {
+    let path = Path::new(file_path);
+
+    // Create parent directories if they don't exist
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    // Create or overwrite the file and write content
+    let mut file = File::create(path)?;
+    file.write_all(content.as_bytes())?;
+
+    Ok(())
+}
 
 pub async fn read_output_lines(
     stream: Option<impl tokio::io::AsyncRead + Unpin>,
@@ -43,9 +58,28 @@ pub async fn read_output_lines(
 pub async fn read_stdout( stdout: ChildStdout,step: usize,state: &Arc<AppState>) {
     let mut reader = BufReader::new(stdout);
     let mut line = String::new();
+    let mut is_env = false;
+    let mut envs:HashMap<String,String> = HashMap::new();
     while let Ok(bytes_read) = reader.read_line(&mut line).await {
         if bytes_read == 0 {
             break; // EOF
+        }
+
+        if line.contains("+_+_+_") {
+            is_env = true;
+            line.clear();
+            continue;
+        }
+
+        if is_env {
+            if let Some( (key,value) ) = line.split_once("="){
+                if key =="NAME" || key =="AGE"{
+                    envs.insert(key.to_string(),value.to_string());
+                    
+                }
+                line.clear();
+            }
+            continue;
         }
 
         {
@@ -73,6 +107,8 @@ pub async fn read_stdout( stdout: ChildStdout,step: usize,state: &Arc<AppState>)
         line.clear();
         
     }
+
+    println!("Envs: {:?}",envs);
 }
 
 pub async fn read_stderr( stderr: ChildStderr,step: usize,state: &Arc<AppState>) {
