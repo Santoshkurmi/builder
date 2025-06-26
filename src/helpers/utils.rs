@@ -3,15 +3,18 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use rand::{distributions::Alphanumeric, Rng};
+use regex::Regex;
 use reqwest::Client;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{ChildStderr, ChildStdout};
+use tokio::time;
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use chrono::Local;
 use crate::models::app_state::ChannelMessage;
 use crate::models::app_state::{AppState, BuildLog};
+use crate::models::config::PayloadType;
 use crate::models::status::Status;
 
 pub fn generate_token(len: usize) -> String {
@@ -23,6 +26,8 @@ pub fn generate_token(len: usize) -> String {
 }
 
 pub fn create_file_with_dirs_and_content(file_path: &str, content: &str) -> io::Result<()> {
+    
+    
     let path = Path::new(file_path);
 
     // Create parent directories if they don't exist
@@ -37,146 +42,293 @@ pub fn create_file_with_dirs_and_content(file_path: &str, content: &str) -> io::
     Ok(())
 }
 
-pub async fn read_output_lines(
-    stream: Option<impl tokio::io::AsyncRead + Unpin>,
+pub fn secure_join_path(base: &str, user_input: &str) -> Option<String> {
+    // Canonicalize base directory
+    let base = fs::canonicalize(base).ok()?;
+    // Join and canonicalize the full path
+    let full_path = fs::canonicalize(base.join(user_input)).ok()?;
+    // Ensure full path is within base
+    if full_path.starts_with(&base) {
+        let str_path = full_path.to_str()?;
+        // Ensure path is not empty
+        if str_path.is_empty() {
+            return None;
+        }
+        Some(str_path.into())
+    } else {
+        None
+    }
+}
+
+
+
+pub async fn extract_payload(state: &Arc<AppState>,env_map:&mut HashMap<String,String>,param_map:&mut HashMap<String,String>) {
+
+
+    for payload in &state.config.project.build.payload {
+
+        if PayloadType::Param == payload.r#type {
+            let mut  current_build = state.builds.current_build.lock().await;
+            let  current_build = current_build.as_mut().unwrap();
+            let param_value = current_build.payload.get(payload.key1.as_str()).unwrap();
+            param_map.insert(payload.key1.to_string(), param_value.to_string());
+            continue;
+        }
+
+        if payload.r#type != PayloadType::Env{
+            continue;
+        }
+        let env_name = if payload.key2.is_some() {
+            payload.key2.as_ref().unwrap()
+        } else {
+            payload.key1.as_str()
+        };
+
+        let mut  current_build = state.builds.current_build.lock().await;
+        let  current_build = current_build.as_mut().unwrap();
+        let env_value = current_build.payload.get(payload.key1.as_str()).unwrap();
+        env_map.insert(env_name.to_string(), env_value.to_string());
+    }
+}
+
+pub async fn read_stdout(
+    stdout: ChildStdout,
     step: usize,
-    status: Status,
     state: &Arc<AppState>,
+    send_to_sock: bool,
+    bypass_termination: bool,
+    extract_envs: &Vec<String>,
+    env_map: &mut HashMap<String, String>,
 ) {
-    if let Some(output) = stream {
-        let reader = BufReader::new(output);
-        let mut lines = reader.lines();
+    let reader = &mut BufReader::new(stdout);
+    let mut lines = reader.lines();
 
-        while let Ok(Some(line)) = lines.next_line().await {
-            send_output(state, step, &status, &line).await;
-        }
-    }
-}
-
-
-
-pub async fn read_stdout( stdout: ChildStdout,step: usize,state: &Arc<AppState>) {
-    let mut reader = BufReader::new(stdout);
-    let mut line = String::new();
     let mut is_env = false;
-    let mut envs:HashMap<String,String> = HashMap::new();
-    while let Ok(bytes_read) = reader.read_line(&mut line).await {
-        if bytes_read == 0 {
-            break; // EOF
-        }
+    let mut buffer: Vec<BuildLog> = Vec::new();
 
-        if line.contains("+_+_+_") {
-            is_env = true;
-            line.clear();
-            continue;
-        }
 
-        if is_env {
-            if let Some( (key,value) ) = line.split_once("="){
-                if key =="NAME" || key =="AGE"{
-                    envs.insert(key.to_string(),value.to_string());
-                    
+    let flush_interval = if state.config.project.flush_interval >=500{
+            state.config.project.flush_interval
+        }
+        else{
+            500
+        };
+
+    // Interval timer for flushing logs every 200ms (adjust as needed)
+    let mut interval = time::interval(Duration::from_millis(flush_interval as u64));
+
+    // Set flush interval (e.g. 1 second)
+
+    loop {
+        tokio::select! {
+            line_opt = lines.next_line() => {
+                match line_opt {
+                    Ok(Some(line)) => {
+                        if line.contains("+_+_+_") {
+                            is_env = true;
+                            continue;
+                        }
+
+                        if is_env {
+                            if let Some((key, value)) = line.split_once('=') {
+                                if extract_envs.contains(&key.to_string()) {
+                                    let mut current_build = state.builds.current_build.lock().await;
+                                    if let Some(build) = current_build.as_mut() {
+                                        build.payload.insert(key.to_string(), value.to_string());
+                                    }
+                                    env_map.insert(key.to_string(), value.to_string());
+                                }
+                            }
+                            continue;
+                        }
+
+                        if !bypass_termination && *state.is_terminated.lock().await {
+                            break;
+                        }
+
+                        let trimmed = line.trim();
+                        if trimmed.is_empty() {
+                            continue;
+                        }
+
+                        let log = BuildLog {
+                            timestamp: chrono::Utc::now(),
+                            status: Status::Success,
+                            step,
+                            message: trimmed.to_string(),
+                        };
+
+                        println!("{}", trimmed);
+
+                        // Buffer log for batch sending
+                        buffer.push(log);
+                    }
+                    Ok(None) => {
+                        // EOF
+                        break;
+                    }
+                    Err(e) => {
+                        eprintln!("Error reading stdout line: {:?}", e);
+                        break;
+                    }
                 }
-                line.clear();
             }
-            continue;
+            _ = interval.tick() => {
+                if !buffer.is_empty() {
+                    // Lock once and push all buffered logs
+                    let mut current_build = state.builds.current_build.lock().await;
+                    if let Some(build) = current_build.as_mut() {
+                        for log in &buffer {
+                            build.logs.push(log.clone());
+                        }
+                    }
+
+                    if send_to_sock {
+                        let json_str = serde_json::to_string(&buffer).unwrap();
+                        let _ = state.build_sender.send(ChannelMessage::Data(json_str));
+                    }
+
+                    buffer.clear();
+                }
+            }
         }
-
-        {
-            if *state.is_terminated.lock().await {
-                let mut  current_build = state.builds.current_build.lock().await;
-                let  current_build = current_build.as_mut().unwrap();
-                current_build.status = Status::Aborted;
-                break;
-            }
-        }//lock can be taken in above I think
-
-
-        let log = BuildLog {
-            timestamp: chrono::Utc::now(),
-            status: Status::Success,
-            step: step,
-            message: line.trim().to_string(),
-        };
-        println!("Output: {}", line);
-        let json_str = serde_json::to_string(&log).unwrap();
-        let mut  current_build = state.builds.current_build.lock().await;
-        let  current_build = current_build.as_mut().unwrap();
-        current_build.logs.push(log);
-        let _ = state.build_sender.send( ChannelMessage::Data( json_str ));
-        line.clear();
-        
     }
 
-    println!("Envs: {:?}",envs);
-}
-
-pub async fn read_stderr( stderr: ChildStderr,step: usize,state: &Arc<AppState>) {
-    let mut reader = BufReader::new(stderr);
-    let mut line = String::new();
-    while let Ok(bytes_read) = reader.read_line(&mut line).await {
-        if bytes_read == 0 {
-            break; // EOF
+    // Send remaining buffered logs on EOF or termination
+    if !buffer.is_empty() {
+        let mut current_build = state.builds.current_build.lock().await;
+        if let Some(build) = current_build.as_mut() {
+            for log in &buffer {
+                build.logs.push(log.clone());
+            }
         }
 
-        {
-            if *state.is_terminated.lock().await {
-                let mut  current_build = state.builds.current_build.lock().await;
-                let  current_build = current_build.as_mut().unwrap();
-                current_build.status = Status::Aborted;
-                break;
-            }
-        }//lock can be taken in above I think
-
-
-        let log = BuildLog {
-            timestamp: chrono::Utc::now(),
-            status: Status::Error,
-            step: step,
-            message: line.trim().to_string(),
-        };
-        println!("Output: {}", line);
-        let json_str = serde_json::to_string(&log).unwrap();
-        let mut  current_build = state.builds.current_build.lock().await;
-        let  current_build = current_build.as_mut().unwrap();
-        current_build.logs.push(log);
-        let _ = state.build_sender.send( ChannelMessage::Data( json_str ));
-        line.clear();
-        
+        if send_to_sock {
+            let json_str = serde_json::to_string(&buffer).unwrap();
+            let _ = state.build_sender.send(ChannelMessage::Data(json_str));
+        }
     }
 }
 
+pub async fn read_stderr(
+    stderr: ChildStderr,
+    step: usize,
+    state: &Arc<AppState>,
+    send_to_sock: bool,
+    bypass_termination: bool,
+) {
+    let reader = &mut BufReader::new(stderr);
+    let mut lines = reader.lines();
 
+    // Buffer to hold logs before sending
+    let mut buffer: Vec<BuildLog> = Vec::new();
 
-pub async fn send_output(state: &Arc<AppState>, step: usize, status: &Status, message: &str) {
-    let msg = BuildLog {
-        step: step,
-        status: status.clone(),//need to change here
-        message: message.to_string(),
-        timestamp: chrono::Utc::now(),
-    };
-    let json_str = serde_json::to_string(&msg).unwrap();
+    let flush_interval = if state.config.project.flush_interval >=500{
+            state.config.project.flush_interval
+        }
+        else{
+            500
+        };
 
-    let _ = state.build_sender.send( ChannelMessage::Data( json_str.clone() ));
+    // Interval timer for flushing logs every 200ms (adjust as needed)
+    let mut interval = time::interval(Duration::from_millis(flush_interval as u64));
 
-    let mut guard = state.builds.current_build.lock().await;
+    loop {
+        tokio::select! {
+            line_opt = lines.next_line() => {
+                match line_opt {
+                    Ok(Some(line)) => {
+                        if !bypass_termination && *state.is_terminated.lock().await {
+                            break;
+                        }
+
+                        let trimmed = line.trim();
+                        if trimmed.is_empty() {
+                            continue;
+                        }
+
+                        let log = BuildLog {
+                            timestamp: chrono::Utc::now(),
+                            status: Status::Error,
+                            step,
+                            message: trimmed.to_string(),
+                        };
+
+                        println!("Error: {}", trimmed);
+
+                        // Add log to buffer
+                        buffer.push(log);
+                    }
+                    Ok(None) => {
+                        // EOF reached
+                        break;
+                    }
+                    Err(e) => {
+                        eprintln!("Error reading stderr line: {:?}", e);
+                        break;
+                    }
+                }
+            }
+            _ = interval.tick() => {
+                if !buffer.is_empty() {
+                    // Lock current_build once per flush
+                    let mut current_build = state.builds.current_build.lock().await;
+                    if let Some(build) = current_build.as_mut() {
+                        for log in &buffer {
+                            build.logs.push(log.clone());
+                        }
+                    }
+
+                    // Send batch if requested
+                    if send_to_sock {
+                        let json_str = serde_json::to_string(&buffer).unwrap();
+                        let _ = state.build_sender.send(ChannelMessage::Data(json_str));
+                    }
+
+                    buffer.clear();
+                }
+            }
+        }
+    }
+
+    // Send any remaining logs after EOF or termination
+    if !buffer.is_empty() {
+        let mut current_build = state.builds.current_build.lock().await;
+        if let Some(build) = current_build.as_mut() {
+            for log in &buffer {
+                build.logs.push(log.clone());
+            }
+        }
+        if send_to_sock {
+            let json_str = serde_json::to_string(&buffer).unwrap();
+            let _ = state.build_sender.send(ChannelMessage::Data(json_str));
+        }
+    }
+}
+
     
-    if let Some(current_build) = &mut *guard {
-        current_build.logs.push(msg);
-    }
 
-    // buf.push(msg);
+
+
+
+
+
+pub fn replace_placeholders(template: &str, values: &HashMap<String, String>) -> String {
+    let re = Regex::new(r"\{([^}]+)\}").unwrap();
+
+    re.replace_all(template, |caps: &regex::Captures| {
+        let key = &caps[1];
+        values.get(key)
+            .map(|s| s.to_string()) // convert &str to String
+            .unwrap_or_else(|| caps[0].to_string()) // fallback: whole match
+    }).into_owned()
 }
 
 
-pub async  fn save_log(log_path:String,logs:String,token:String){
+pub async  fn save_log(log_path:&String,logs:String,build_id:String){
 
    
-    // let home_dir = dirs::home_dir().expect("Home directory not found");
-
-    // let full_path = format!("{}/{}",home_dir.to_string_lossy(),log_path);
-
-
+ 
     let full_path = log_path;
 
     // Create logs directory if it doesn't exist
@@ -186,7 +338,7 @@ pub async  fn save_log(log_path:String,logs:String,token:String){
     let mut file_path = PathBuf::from(&full_path);
 
     let now = Local::now();
-    file_path.push(format!("{}_{}.log", now.format("%Y-%m-%d_%H-%M-%S"), token ));
+    file_path.push(format!("{}_{}.log", now.format("%Y-%m-%d_%H-%M-%S"), build_id ));
 
     println!("File path: {}", file_path.to_str().unwrap());
 
@@ -200,15 +352,18 @@ pub async  fn save_log(log_path:String,logs:String,token:String){
 
 
 pub async fn send_to_other_server(path:String,data:String) ->bool{
+    
     let client = Client::new();
     println!("{}",path);
+
     let res = client
         .post(path)
         .body(data)
         .header("Content-Type", "application/json")
-        .timeout(Duration::new(5, 0))
+        .timeout(Duration::new(20, 0))
         .send()
         .await;
+
     match res {
         Ok(response) => {
             let status = response.status();

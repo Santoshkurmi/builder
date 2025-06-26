@@ -20,31 +20,41 @@ pub async fn connect_and_stream_ws_project(
     |--------------------------------------------------------------------------
     |
     */
-    let token = query.get("token_project").clone(); 
+    let token = query.get("token").clone(); 
    
+
+
+
+    if token.is_none() {
+        return Ok(HttpResponse::Unauthorized().body("Missing token"));
+    }
 
     let token = token.unwrap();
 
     let state = data.as_ref().clone();
     // let current_token_lock = state.token.lock().await;
 
-    let project_token = state.project_token.clone();
-    if project_token.is_none() {
+    let project_token_guard = state.project_token.lock().await;
+    if project_token_guard.is_none() {
         return Ok(HttpResponse::Unauthorized().body("Invalid Token"));
     }
-    let project_token  = project_token.as_ref().unwrap();
+    let project_token  = project_token_guard.as_ref().unwrap();
     
     if project_token != token {
         return Ok(HttpResponse::Unauthorized().body("Invalid token"));
     }
+
+    drop(project_token_guard);
 
 
     let (res, mut session, _msg_stream) = handle(&req, stream)?;
 
     // Send old buffered messages first
     {
-        let buf = state.project_logs.clone();
-        let json_array = serde_json::to_string(&*buf).unwrap();
+        let buf = state.project_logs.lock().await;
+        
+        let json_array = serde_json::to_string(&*buf).unwrap_or_default();
+        drop(buf);
         // for line in buf.iter() {
             let _ = session.text(json_array).await;
         // }

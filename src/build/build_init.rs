@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use std::{collections::HashMap, sync::Arc};
 
-use crate::{auth::check_auth::is_authorized, build::build_manager::{self, build_manager}, helpers::utils::{create_file_with_dirs_and_content, generate_token}, models::{app_state::{AppState, BuildProcess, BuildRequest, BuildResponse, BuildState}, config::{Config, PayloadType}, status::Status}};
+use crate::{auth::check_auth::is_authorized, build::build_manager::{self, build_manager}, helpers::utils::{create_file_with_dirs_and_content, generate_token, secure_join_path}, models::{app_state::{AppState, BuildProcess, BuildRequest, BuildResponse, BuildState, ChannelMessage, ProjectLog}, config::{Config, PayloadType}, status::Status}};
 
 
 
@@ -23,6 +23,26 @@ pub async fn build_initialize(
             token: None
         };
         return HttpResponse::Unauthorized().json(res);
+    }
+
+    {
+        let project_token = payload.get("project_token");
+        if project_token.is_none() {
+            let res = BuildResponse{
+                message: "Missing project token key project_token".to_string(),
+                status: Status::MissingProjectToken,
+                build_id: None,
+                token: None
+            };
+            return HttpResponse::Unauthorized().json(res);
+        }
+
+        {
+            let project_token = project_token.unwrap();
+            let mut project_token_lock = state.project_token.lock().await;
+            *project_token_lock = Some(project_token.to_string());
+        }
+
     }
 
     let unique_id = payload.get(&state.config.project.build.unique_build_key);
@@ -106,7 +126,22 @@ pub async fn build_initialize(
             reqired_payload.key1.as_str()
         };
 
-        let create_path = create_file_with_dirs_and_content(file_path, payload.get(&reqired_payload.key1).unwrap().as_str());
+        // let path_relative = format!("{}/{}", state.config.project.project_path, file_path);
+
+        let path_relative = secure_join_path(&state.config.project.project_path, &file_path);
+        if path_relative.is_none(){
+            let res = BuildResponse{
+                message: format!("Failed to create payload file: Path is not secure"),
+                status: Status::FileCreateFailed,
+                build_id: None,
+                token: None
+            };
+            return HttpResponse::BadRequest().json(res);
+        }
+
+        let path_relative = path_relative.unwrap();
+
+        let create_path = create_file_with_dirs_and_content(&path_relative, payload.get(&reqired_payload.key1).unwrap().as_str());
         if let Err(e) = create_path {
             let res = BuildResponse{
                 message: format!("Failed to create payload file: {}", e),
@@ -133,7 +168,21 @@ pub async fn build_initialize(
     build_queue.push(build_state);
     drop(build_queue);
 
+    let project_log = ProjectLog{
+        id: id.to_string(),
+        unique_id: unique_id.unwrap().to_string(),
+        socket_token: new_token.clone(),
+        step: 0,
+        state: if !*state.is_queue_running.lock().await {Status::Building} else {Status::Pending},
+    };
+    {
 
+        let project_log_json = serde_json::to_string(&project_log).unwrap();
+        let _ = state.project_sender.send(ChannelMessage::Data(project_log_json));
+        
+        let mut project_logs = state.project_logs.lock().await;
+        project_logs.push(project_log);
+    }
 
     if !*state.is_queue_running.lock().await{
 
@@ -148,7 +197,7 @@ pub async fn build_initialize(
         token: Some(new_token.clone()),
         build_id: Some( id.to_string() ),
         status:if is_already_running {Status::Pending} else {Status::Building},
-    };
+    }; //need to handle here
 
     
 

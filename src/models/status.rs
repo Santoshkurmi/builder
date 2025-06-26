@@ -17,6 +17,7 @@ pub enum Status {
     MaxPending,
     MissingPayload,
     FileCreateFailed,
+    MissingProjectToken
 }
 
 impl Status {
@@ -37,6 +38,7 @@ impl Status {
             Status::Unauthorized => "unauthorized",
             Status::MissingUniqueId => "missing_unique_id",
             Status::MaxPending => "max_pending",
+            Status::MissingProjectToken => "missing_project_token",
         }
     } //as_str
 }

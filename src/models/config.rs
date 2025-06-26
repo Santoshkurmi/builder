@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 pub struct Config {
     pub name: String,
     pub port: u16,
-    pub base_path: String,
     pub log_path: String,
     pub enable_logs: bool,
     pub ssl: SslConfig,
@@ -47,8 +46,11 @@ pub struct ProjectConfig {
     pub allow_multi_build: bool,
     pub max_pending_build: u32,
     pub next_build_delay: u32,
+    pub flush_interval: u32,
     // pub base_endpoint_path: String,
     pub build: BuildConfig,
+    pub project_path: String,
+
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -80,7 +82,6 @@ impl std::str::FromStr for PayloadType {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BuildConfig {
-    pub project_path: String,
     pub payload: Vec<Payload>,
     pub unique_build_key: String,
     pub on_success_failure: String,
@@ -97,9 +98,12 @@ pub struct CommandConfig {
     pub command: String,
     pub title: String,
     #[serde(default)]
-    pub payload: Vec<Payload>,
+    pub extract_envs: Vec<String>,
     #[serde(default="default_on_error")]
-    pub on_error: String, // "abort", "continue"
+    pub abort_on_error: bool, // "abort", "continue"
+    #[serde(default="default_to_sock")]
+    pub send_to_sock: bool,
+
 }
 
 impl Config {
@@ -110,6 +114,10 @@ impl Config {
     }
 }
 
-fn default_on_error() -> String {
-    "abort".to_string()
+fn default_to_sock() -> bool {
+    true
+}
+
+fn default_on_error() -> bool {
+    true
 }

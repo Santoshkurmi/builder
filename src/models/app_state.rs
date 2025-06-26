@@ -15,10 +15,18 @@ pub struct AppState {
     pub project_sender: broadcast::Sender<ChannelMessage>,
     pub build_sender: broadcast::Sender<ChannelMessage>,
     pub is_queue_running: Arc<Mutex<bool>>,
-    pub running_command_child: Arc<Mutex<Option<tokio::process::Child>>>,
     pub is_terminated: Arc<Mutex<bool>>,
-    pub project_token: Option<String>,
-    pub project_logs: Vec<BuildLog>,
+    pub project_token: Arc< Mutex< Option<String> > >,
+    pub project_logs:  Arc< Mutex< Vec<ProjectLog> > >,
+}
+
+#[derive(Clone,Serialize)]
+pub struct ProjectLog {
+    pub id: String,
+    pub unique_id: String,
+    pub socket_token: String,
+    pub step: usize,
+    pub state: Status,
 }
 
 #[derive(Clone)]
@@ -47,7 +55,7 @@ pub struct BuildRequest {
 }
 
 // #[derive()]
-#[derive(Clone)]
+#[derive(Clone,Serialize)]
 
 pub struct BuildProcess {
     pub id: String,
@@ -60,6 +68,7 @@ pub struct BuildProcess {
     pub duration_seconds: u64,
     pub socket_token: String,
     pub payload: HashMap<String, String>,
+    pub out_payload: HashMap<String, String>,
     pub logs: Vec<BuildLog>,
 }
 
@@ -94,13 +103,12 @@ impl AppState {
         Self {
             config,
             is_terminated: Arc::new(Mutex::new(false)),
-            running_command_child: Arc::new(Mutex::new(None)),
             project_sender,
             build_sender,
             is_queue_running: Arc::new(Mutex::new(false)),
             builds: BuildState::new(),
-            project_token: None,
-            project_logs: Vec::new(),
+            project_token: Arc::new(Mutex::new(None)),
+            project_logs: Arc::new(Mutex::new(Vec::new())),
         }
     }
 }

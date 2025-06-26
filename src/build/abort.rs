@@ -41,6 +41,8 @@ pub async fn abort(req: HttpRequest,payload: web::Json<HashMap<String, String>>,
         }
     }
 
+    drop(guard);
+
     let mut queue = state.builds.build_queue.lock().await;
     if let Some(index) = queue.iter().position(|build| {
         &build.unique_id == unique_id.unwrap()
@@ -56,7 +58,7 @@ pub async fn abort(req: HttpRequest,payload: web::Json<HashMap<String, String>>,
 }
 
 
-pub async fn abort_all(req: HttpRequest,payload: web::Json<HashMap<String, String>>,state: web::Data<AppState>,)-> impl Responder {
+pub async fn abort_all(req: HttpRequest,state: web::Data<AppState>,)-> impl Responder {
 
     if !is_authorized(&req,state.clone()).await {
         let res = BuildResponse{
@@ -68,11 +70,15 @@ pub async fn abort_all(req: HttpRequest,payload: web::Json<HashMap<String, Strin
         return HttpResponse::Unauthorized().json(res);
     }
 
+    {
+        let mut is_terminated = state.is_terminated.lock().await;
+        *is_terminated = true;
 
-    let mut is_terminated = state.is_terminated.lock().await;
-    *is_terminated = true;
+    }
+
    
-
+    let mut queue = state.builds.build_queue.lock().await;
+    queue.clear();
     
 
     HttpResponse::Unauthorized().json("Aborted All Builds")
