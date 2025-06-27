@@ -1,7 +1,9 @@
 [package]
-name = "builder"
+name = "app_builder"
 version = "0.1.0"
 edition = "2024"
+authors = ["Your Name <you@example.com>"]
+description = "A short summary of what your crate does"
 
 [dependencies]
 actix-web = { version="4.4", features=["openssl"] }

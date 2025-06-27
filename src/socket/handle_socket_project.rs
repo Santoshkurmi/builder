@@ -1,11 +1,11 @@
-use std::{collections::HashMap, fmt::format};
+use std::{collections::HashMap};
 
-use actix_web::{get, web, Error, HttpRequest, HttpResponse};
+use actix_web::{ web, Error, HttpRequest, HttpResponse};
 use actix_ws::handle;
 
 use crate::models::app_state::{AppState, ChannelMessage};
 
-
+/// connect to the project socket on the project in whole
 pub async fn connect_and_stream_ws_project(
     req: HttpRequest,
     stream: web::Payload,
@@ -14,37 +14,38 @@ pub async fn connect_and_stream_ws_project(
 ) -> Result<HttpResponse, Error> {
 
 
-    /*
-    |--------------------------------------------------------------------------
-    | Handle to check if token is matched or not, this is used in single place, so no need to crate middleware for that
-    |--------------------------------------------------------------------------
-    |
-    */
-    let token = query.get("token").clone(); 
+    // /*
+    // |--------------------------------------------------------------------------
+    // | Handle to check if token is matched or not, this is used in single place, so no need to crate middleware for that
+    // |--------------------------------------------------------------------------
+    // |
+    // */
+    // let token = query.get("token").clone(); 
    
 
 
 
-    if token.is_none() {
-        return Ok(HttpResponse::Unauthorized().body("Missing token"));
-    }
+    // if token.is_none() {
+    //     return Ok(HttpResponse::Unauthorized().body("Missing token"));
+    // }
 
-    let token = token.unwrap();
+    // let token = token.unwrap();
 
     let state = data.as_ref().clone();
-    // let current_token_lock = state.token.lock().await;
+    // // let current_token_lock = state.token.lock().await;
 
-    let project_token_guard = state.project_token.lock().await;
-    if project_token_guard.is_none() {
-        return Ok(HttpResponse::Unauthorized().body("Invalid Token"));
-    }
-    let project_token  = project_token_guard.as_ref().unwrap();
+    // let project_token_guard = state.project_token.lock().await;
+    // if project_token_guard.is_none() {
+    //     return Ok(HttpResponse::Unauthorized().body("Invalid Token"));
+    // }
+    // let project_token  = project_token_guard.as_ref().unwrap();
     
-    if project_token != token {
-        return Ok(HttpResponse::Unauthorized().body("Invalid token"));
-    }
+    // if project_token != token {
+    //     return Ok(HttpResponse::Unauthorized().body("Invalid token"));
+    // }
 
-    drop(project_token_guard);
+    // drop(project_token_guard);
+    println!("Connecting to project websocket");
 
 
     let (res, mut session, _msg_stream) = handle(&req, stream)?;

@@ -23,10 +23,12 @@ pub struct AppState {
 #[derive(Clone,Serialize)]
 pub struct ProjectLog {
     pub id: String,
+    pub timestamp: DateTime<Utc>,
     pub unique_id: String,
     pub socket_token: String,
     pub step: usize,
     pub state: Status,
+    pub message: String,
 }
 
 #[derive(Clone)]
@@ -65,7 +67,7 @@ pub struct BuildProcess {
     pub total_steps: usize,
     pub started_at: DateTime<Utc>,
     pub end_at: DateTime<Utc>,
-    pub duration_seconds: u64,
+    pub duration: i64,
     pub socket_token: String,
     pub payload: HashMap<String, String>,
     pub out_payload: HashMap<String, String>,

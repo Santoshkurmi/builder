@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use serde_json::json;
@@ -7,8 +6,8 @@ use crate::{auth::check_auth::is_authorized, models::{app_state::{AppState, Buil
 
 
 
-
-pub async fn handle_error_refresh(
+/// get all pending failed attempt while sending to other server
+pub async fn get_pending_update(
     req: HttpRequest,
     state: web::Data<AppState>,
 ) -> impl Responder {
@@ -27,9 +26,17 @@ pub async fn handle_error_refresh(
     let  error_history_guard = &mut state.builds.failed_history.lock().await;
     let error_history = error_history_guard.to_vec();
 
+
+    let queue_count: usize;
+
+    {
+        queue_count = state.builds.build_queue.lock().await.len();
+    }
+
     let json_str = json!({
         "error_history": error_history,
-        "status": "success"
+        "status": "success",
+        "queue_count": queue_count
     });
 
     error_history_guard.clear();

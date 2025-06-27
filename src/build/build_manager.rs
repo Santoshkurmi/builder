@@ -1,13 +1,12 @@
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap};
 
 use actix_web::web;
-use tokio::time::sleep;
 
-use crate::{error_success::handle_error_success::{self, handle_error_success}, helpers::utils::{save_log, send_to_other_server}, models::{app_state::{self, AppState, BuildProcess, ChannelMessage, ProjectLog}, status::Status}};
+use crate::{error_success::handle_error_success::{ handle_error_success}, models::{app_state::{ AppState, BuildProcess, ChannelMessage, ProjectLog}, status::Status}};
 
 use super::run_build::run_build;
 
-
+/// hanldes the builds queue and execution
 pub async fn build_manager(state: web::Data<AppState>) {
     
     {
@@ -17,7 +16,6 @@ pub async fn build_manager(state: web::Data<AppState>) {
    
 
     loop{
-        println!("Starting build manager and executing build");
         let mut build_queue = state.builds.build_queue.lock().await;
         
         if build_queue.is_empty() {
@@ -25,6 +23,7 @@ pub async fn build_manager(state: web::Data<AppState>) {
         }
 
         let build = build_queue.remove(0);
+        drop(build_queue);
 
         let build_process = BuildProcess{
             id: build.id.clone(),
@@ -34,12 +33,13 @@ pub async fn build_manager(state: web::Data<AppState>) {
             total_steps: state.config.project.build.commands.len() as usize,
             started_at: chrono::Utc::now(),
             end_at: chrono::Utc::now(),
-            duration_seconds: 0,
+            duration:0,
             socket_token: build.socket_token.clone(),
             logs: Vec::new(),
             payload: build.payload.clone(),
             out_payload: HashMap::new(),
         };
+        println!("Starting build for {}", build.unique_id);
 
         {
             state.builds.current_build.lock().await.replace(build_process);
@@ -52,10 +52,11 @@ pub async fn build_manager(state: web::Data<AppState>) {
             unique_id: build.unique_id.clone(),
             socket_token: build.socket_token.clone(),
             step: 0,
+            timestamp: chrono::Utc::now(),
             state: Status::Building,
+            message: "Starting build".to_string()
         };
 
-        drop(build_queue);
 
         
         {
@@ -68,12 +69,18 @@ pub async fn build_manager(state: web::Data<AppState>) {
         let _ = state.project_sender.send(ChannelMessage::Data("Build started".to_string()));
         
         
+        {
+            let mut terminated = state.is_terminated.lock().await;
+            *terminated = false;
+        }
 
         //check the status of the build whether its failed or success
         {
             let mut current_build = state.builds.current_build.lock().await;
         
             let cur_build = current_build.as_mut().unwrap();
+            cur_build.end_at = chrono::Utc::now();
+            cur_build.duration = cur_build.end_at.signed_duration_since(cur_build.started_at).num_seconds();
             let cur_build_clone = cur_build.clone();
 
             drop(current_build);
@@ -85,11 +92,11 @@ pub async fn build_manager(state: web::Data<AppState>) {
         }
 
         {
-
-        }
             let mut current_build = state.builds.current_build.lock().await;
         
             *current_build = None;
+        }
+            
 
         {
 
@@ -127,7 +134,7 @@ pub async fn build_manager(state: web::Data<AppState>) {
     // let mut build_queue = state.builds.build_queue.lock().await;
     // *build_queue = Vec::new();
 
-    println!("End of all builds");
+    println!("Bulid manager ended! Nothing to do.");
 
 
 }

@@ -1,11 +1,11 @@
-use std::{collections::HashMap, hash::Hash, os::linux::raw::stat, process::Stdio};
+use std::{collections::HashMap, process::Stdio};
 
 use actix_web::web;
-use tokio::{io::{AsyncBufReadExt, BufReader}, process::Command};
+use tokio::{ process::Command};
 
-use crate::{helpers::utils::{extract_payload, read_stderr, read_stdout, replace_placeholders}, models::{app_state::{self, AppState, BuildLog, BuildProcess, ChannelMessage, ProjectLog}, config::{CommandConfig, PayloadType}, status::Status}};
+use crate::{helpers::utils::{extract_payload, read_stderr, read_stdout, replace_placeholders}, models::{app_state::{ AppState, BuildLog, ChannelMessage, ProjectLog}, config::{CommandConfig}, status::Status}};
 
-
+/// execute commands and handle the output
 pub async fn run_build(state: web::Data<AppState>) {
 
     let mut env_map: HashMap<String, String> = HashMap::new();
@@ -18,17 +18,35 @@ pub async fn run_build(state: web::Data<AppState>) {
     let mut step = 1;
     for command in &state.config.project.build.commands {
 
+
         {
+            
+            let log = BuildLog {
+                timestamp: chrono::Utc::now(),
+                status: Status::StartingCommand,
+                step,
+                message: format!("Running command: {}", command.title),
+             };
+            if command.send_to_sock {
+                    let json_str = serde_json::to_string(&log).unwrap();
+                    let _ = state.build_sender.send(ChannelMessage::Data(json_str));
+            }
+
             let mut  current_build_guard = state.builds.current_build.lock().await;
             let  current_build = current_build_guard.as_mut().unwrap();
             current_build.current_step = step;
+
+            current_build.logs.push(log.clone());
 
             let project_log = ProjectLog{
                 id: current_build.id.clone(),
                 unique_id: current_build.unique_id.clone(),
                 socket_token: current_build.socket_token.clone(),
                 step: step,
-                state: Status::Building,
+                state: Status::StartingCommand,
+                timestamp: chrono::Utc::now(),
+
+                message: command.title.clone()
             };
             drop(current_build_guard);
 
@@ -82,7 +100,7 @@ pub async fn run_build(state: web::Data<AppState>) {
             let  current_build = current_build.as_mut().unwrap();
             current_build.status = Status::Error; //
             if command.abort_on_error {
-                *state.is_terminated.lock().await = true;
+                // *state.is_terminated.lock().await = true;
                 break;
             }//handle the case here all the other will also be terminated, handle here
         }
@@ -103,7 +121,6 @@ pub async fn run_build(state: web::Data<AppState>) {
     
         let mut  current_build_guard = state.builds.current_build.lock().await;
         let  current_build = current_build_guard.as_mut().unwrap();
-
         let commands = if current_build.status == Status::Success{
 
             &state.config.project.build.run_on_success
@@ -127,7 +144,10 @@ pub async fn run_build(state: web::Data<AppState>) {
                 unique_id: current_build.unique_id.clone(),
                 socket_token: current_build.socket_token.clone(),
                 step: step,
+                timestamp: chrono::Utc::now(),
+
                 state: current_build.status.clone(),
+                message: "Finalizing build".to_string()
             };
 
             let project_log_json = serde_json::to_string(&project_log).unwrap();
@@ -145,7 +165,6 @@ pub async fn run_on_success_error_payload(state: &web::Data<AppState>,env_map:&m
 
    
     let mut step = 1;
-    println!("Running on success/error commands");
     for command in commands {
 
         let  command_with_params = replace_placeholders(&command.command, &param_map);
@@ -178,12 +197,10 @@ pub async fn run_on_success_error_payload(state: &web::Data<AppState>,env_map:&m
 
         let status = child.wait().await.expect("Failed to wait on child");
         if !status.success() {
-            println!("command failed ");
             if command.abort_on_error {
                 break;
             }//handle the case here all the other will also be terminated, handle here
         }
-            println!("command success");
 
 
         step += 1;

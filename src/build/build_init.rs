@@ -1,13 +1,13 @@
 
-use actix_web::{HttpRequest, HttpResponse, Responder, post, rt::task::JoinHandle, web};
+use actix_web::{HttpRequest, HttpResponse, Responder,  web};
 use uuid::Uuid;
 
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap};
 
-use crate::{auth::check_auth::is_authorized, build::build_manager::{self, build_manager}, helpers::utils::{create_file_with_dirs_and_content, generate_token, secure_join_path}, models::{app_state::{AppState, BuildProcess, BuildRequest, BuildResponse, BuildState, ChannelMessage, ProjectLog}, config::{Config, PayloadType}, status::Status}};
+use crate::{auth::check_auth::is_authorized, build::build_manager::{ build_manager}, helpers::utils::{create_file_with_dirs_and_content, generate_token, secure_join_path}, models::{app_state::{AppState,  BuildRequest, BuildResponse,  ChannelMessage, ProjectLog}, config::{ PayloadType}, status::Status}};
 
 
-
+/// Initialize a build
 pub async fn build_initialize(
     req: HttpRequest,
     payload: web::Json<HashMap<String, String>>,
@@ -16,25 +16,22 @@ pub async fn build_initialize(
 
   
     if !is_authorized(&req,state.clone()).await {
+        
         let res = BuildResponse{
-            message: "Unauthorized Access".to_string(),
-            status: Status::Unauthorized,
+            message:"Unauthorized Access".to_string(),
+            status: Status::MissingUniqueId,
             build_id: None,
             token: None
         };
+
         return HttpResponse::Unauthorized().json(res);
     }
 
     {
         let project_token = payload.get("project_token");
         if project_token.is_none() {
-            let res = BuildResponse{
-                message: "Missing project token key project_token".to_string(),
-                status: Status::MissingProjectToken,
-                build_id: None,
-                token: None
-            };
-            return HttpResponse::Unauthorized().json(res);
+            
+            return HttpResponse::Unauthorized().body("Missing project token key project_token");
         }
 
         {
@@ -173,7 +170,10 @@ pub async fn build_initialize(
         unique_id: unique_id.unwrap().to_string(),
         socket_token: new_token.clone(),
         step: 0,
+        timestamp: chrono::Utc::now(),
         state: if !*state.is_queue_running.lock().await {Status::Building} else {Status::Pending},
+        message: "In Queue".to_string()
+    
     };
     {
 
@@ -183,6 +183,9 @@ pub async fn build_initialize(
         let mut project_logs = state.project_logs.lock().await;
         project_logs.push(project_log);
     }
+
+    println!("Starting build manager to handle build for {}", unique_id.unwrap());
+
 
     if !*state.is_queue_running.lock().await{
 

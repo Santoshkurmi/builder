@@ -280,6 +280,31 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e16d2d3311acee920a9eb8d33b8cbc1787ce4a264e85f964c2404b969bdcd487"
 
 [[package]]
+name = "app_builder"
+version = "0.1.0"
+dependencies = [
+ "actix-web",
+ "actix-ws",
+ "anyhow",
+ "base64 0.21.7",
+ "chrono",
+ "dirs",
+ "env_logger",
+ "futures-util",
+ "log",
+ "openssl",
+ "rand 0.8.5",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "toml",
+ "uuid",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -352,31 +377,6 @@ checksum = "874bb8112abecc98cbd6d81ea4fa7e94fb9449648c93cc89aa40c81c24d7de03"
 dependencies = [
  "alloc-no-stdlib",
  "alloc-stdlib",
-]
-
-[[package]]
-name = "builder"
-version = "0.1.0"
-dependencies = [
- "actix-web",
- "actix-ws",
- "anyhow",
- "base64 0.21.7",
- "chrono",
- "dirs",
- "env_logger",
- "futures-util",
- "log",
- "openssl",
- "rand 0.8.5",
- "regex",
- "reqwest",
- "serde",
- "serde_json",
- "tokio",
- "tokio-stream",
- "toml",
- "uuid",
 ]
 
 [[package]]

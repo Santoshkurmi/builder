@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize,PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
 pub enum Status {
     Error,
     Success,
@@ -17,12 +18,16 @@ pub enum Status {
     MaxPending,
     MissingPayload,
     FileCreateFailed,
-    MissingProjectToken
+    MissingProjectToken,
+    StartingCommand,
+    ChangeProjectToken,
 }
 
 impl Status {
     pub fn as_str(&self) -> &'static str {
         match self {
+            Status::ChangeProjectToken => "change_project_token",
+            Status::StartingCommand => "starting_command",
             Status::FileCreateFailed => "file_create_failed",
             Status::MissingPayload => "missing_payload",
             Status::Error => "error",

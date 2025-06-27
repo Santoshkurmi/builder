@@ -1,13 +1,13 @@
-use std::{env, fs, path::{self, Path}, time::Duration};
+use std::{fs, path::{ Path}, time::Duration};
 
 use actix_web::web;
 use tokio::time::sleep;
 
-use crate::{build, helpers::utils::{save_log, secure_join_path, send_to_other_server}, models::{app_state::{AppState, BuildProcess}, config::PayloadType}};
+use crate::{ helpers::utils::{save_log, secure_join_path, send_to_other_server}, models::{app_state::{AppState, BuildProcess}, config::PayloadType}};
 
 
 
-
+/// handle the success,error log to be send to the other server of the build
 pub async fn handle_error_success(state: web::Data<AppState>,current_build: BuildProcess) {
 
 
@@ -39,7 +39,7 @@ pub async fn handle_error_success(state: web::Data<AppState>,current_build: Buil
                 }
                 let path_relative = path_relative.unwrap();
                 // let path_relative = format!("{}/{}", state.config.project.project_path, file_path);
-                println!("path_relative {}", path_relative);
+                // println!("path_relative {}", path_relative);
                 let path = Path::new(path_relative.as_str());
 
                 if path.exists() {
@@ -69,7 +69,7 @@ pub async fn handle_error_success(state: web::Data<AppState>,current_build: Buil
 
         }
     
-        println!("out_payload {:?}", buld.out_payload);
+        // println!("out_payload {:?}", buld.out_payload);
         let _ = tokio::spawn(async move {
             let is_send = send_to_other_server(url.clone(), log_str.clone()).await;
             

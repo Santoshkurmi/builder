@@ -5,16 +5,18 @@ use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use crate::{auth::check_auth::is_authorized, models::{app_state::{AppState, BuildResponse}, status::Status}};
 
 
-
+/// abort a particular build
 pub async fn abort(req: HttpRequest,payload: web::Json<HashMap<String, String>>,state: web::Data<AppState>,)-> impl Responder {
 
-    if !is_authorized(&req,state.clone()).await {
+     if !is_authorized(&req,state.clone()).await {
+        
         let res = BuildResponse{
-            message: "Unauthorized Access".to_string(),
-            status: Status::Unauthorized,
+            message:"Unauthorized Access".to_string(),
+            status: Status::MissingUniqueId,
             build_id: None,
             token: None
         };
+
         return HttpResponse::Unauthorized().json(res);
     }
 
@@ -37,7 +39,14 @@ pub async fn abort(req: HttpRequest,payload: web::Json<HashMap<String, String>>,
             let mut is_terminated = state.is_terminated.lock().await;
             *is_terminated = true;
             println!("Terminating build");
-            return HttpResponse::Ok().json("Aborted");
+
+            let res = BuildResponse{
+                message: "Aborted".to_string(),
+                status: Status::Aborted,
+                build_id: Some( current_build.id.clone() ),
+                token: None
+            };
+            return HttpResponse::Ok().json(res);
         }
     }
 
@@ -47,12 +56,25 @@ pub async fn abort(req: HttpRequest,payload: web::Json<HashMap<String, String>>,
     if let Some(index) = queue.iter().position(|build| {
         &build.unique_id == unique_id.unwrap()
     }) {
+        let id = queue.get(index).unwrap().id.clone();
         queue.remove(index);
-        return HttpResponse::Ok().json("Aborted Pending Build");
+        let res = BuildResponse{
+            message: "Aborted".to_string(),
+            status: Status::Aborted,
+            build_id: Some(id),
+            token: None
+            };
+        return HttpResponse::Ok().json(res);
     }
 
+    let res = BuildResponse{
+        message: "No Build Found".to_string(),
+        status: Status::NotFound,
+        build_id: None,
+        token: None
+    };
 
-    HttpResponse::Unauthorized().json("Aborted No Build Found")
+    HttpResponse::BadRequest().json(res)
 
 
 }
@@ -61,12 +83,14 @@ pub async fn abort(req: HttpRequest,payload: web::Json<HashMap<String, String>>,
 pub async fn abort_all(req: HttpRequest,state: web::Data<AppState>,)-> impl Responder {
 
     if !is_authorized(&req,state.clone()).await {
+        
         let res = BuildResponse{
-            message: "Unauthorized Access".to_string(),
-            status: Status::Unauthorized,
+            message:"Unauthorized Access".to_string(),
+            status: Status::MissingUniqueId,
             build_id: None,
             token: None
         };
+
         return HttpResponse::Unauthorized().json(res);
     }
 
@@ -79,9 +103,16 @@ pub async fn abort_all(req: HttpRequest,state: web::Data<AppState>,)-> impl Resp
    
     let mut queue = state.builds.build_queue.lock().await;
     queue.clear();
+
+    let res = BuildResponse{
+        message: "Aborted".to_string(),
+        status: Status::Aborted,
+        build_id: None,
+        token: None
+    };
     
 
-    HttpResponse::Unauthorized().json("Aborted All Builds")
+    HttpResponse::Ok().json(res)
 
 
 }

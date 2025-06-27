@@ -1,6 +1,6 @@
-use std::{collections::HashMap, fmt::format};
+use std::{collections::HashMap};
 
-use actix_web::{get, web, Error, HttpRequest, HttpResponse};
+use actix_web::{ web, Error, HttpRequest, HttpResponse};
 use actix_ws::handle;
 
 use crate::models::app_state::{AppState, ChannelMessage};
@@ -12,7 +12,8 @@ use crate::models::app_state::{AppState, ChannelMessage};
 |-----------------------------------------------------------------------
 |
 */
-pub async fn connect_and_stream_ws(
+/// connect to the build socket on a particular build
+pub async fn connect_and_stream_ws_build(
     req: HttpRequest,
     stream: web::Payload,
     data: web::Data<AppState>,
@@ -30,7 +31,7 @@ pub async fn connect_and_stream_ws(
 
     let build_id = query.get(unique_build_key).clone(); 
     let token = query.get("token").clone(); 
-   
+    println!("Connecting to build websocket");
     println!("Token: {:?}",token);
     if let None = token {
         return Ok(HttpResponse::Unauthorized().body("Socket Token is Required"));
@@ -44,6 +45,7 @@ pub async fn connect_and_stream_ws(
     let token = token.unwrap();
 
     
+    println!("Connecting to build websocket 2");
 
 
     let state = data.as_ref().clone();
@@ -57,9 +59,10 @@ pub async fn connect_and_stream_ws(
     if &current_build.unique_id != build_id {
         return Ok(HttpResponse::Unauthorized().body("Invalid build id"));
     }
-    if &current_build.socket_token != token {
-        return Ok(HttpResponse::Unauthorized().body("Invalid token"));
-    }
+    // if &current_build.socket_token != token {
+    //     return Ok(HttpResponse::Unauthorized().body("Invalid token"));
+    // }
+    println!("Connecting to build websocket success");
 
 
     let (res, mut session, _msg_stream) = handle(&req, stream)?;

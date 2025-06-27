@@ -7,6 +7,8 @@ use crate::models::{
     config::{AddressType, AuthConfig, AuthType},
 };
 
+/// Check if the request is authorized
+
 pub async fn is_authorized(
     req: &HttpRequest,
     state: web::Data<AppState>,
@@ -22,7 +24,7 @@ pub async fn is_authorized(
         }
     }
 }
-
+/// Check if the token is authorized
 fn check_token_auth(req: &HttpRequest, auth_config: &AuthConfig) -> bool {
     if let Some(auth_header) = req.headers().get("Authorization") {
         if let Ok(auth_str) = auth_header.to_str() {
@@ -47,6 +49,7 @@ fn check_token_auth(req: &HttpRequest, auth_config: &AuthConfig) -> bool {
     false
 }
 
+/// Check if the address is authorized
 fn check_address_auth(req: &HttpRequest, auth_config: &AuthConfig) -> bool {
     let conn_info = req.connection_info();
     let remote_addr = conn_info.realip_remote_addr().unwrap_or("unknown");

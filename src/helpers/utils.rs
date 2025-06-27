@@ -17,6 +17,8 @@ use crate::models::app_state::{AppState, BuildLog};
 use crate::models::config::PayloadType;
 use crate::models::status::Status;
 
+///generate a random token
+
 pub fn generate_token(len: usize) -> String {
     rand::thread_rng()
         .sample_iter(&Alphanumeric)
@@ -24,7 +26,9 @@ pub fn generate_token(len: usize) -> String {
         .map(char::from)
         .collect()
 }
-
+/// create a file with content and parent directories
+/// if the file already exists, it will be overwritten
+/// if the parent directories do not exist, they will be created
 pub fn create_file_with_dirs_and_content(file_path: &str, content: &str) -> io::Result<()> {
     
     
@@ -41,7 +45,8 @@ pub fn create_file_with_dirs_and_content(file_path: &str, content: &str) -> io::
 
     Ok(())
 }
-
+/// join path with secure path
+/// if the path is not secure, it will be returned as None (If outside the base path)
 pub fn secure_join_path(base: &str, user_input: &str) -> Option<String> {
     // Canonicalize base directory
     let base = fs::canonicalize(base).ok()?;
@@ -61,7 +66,7 @@ pub fn secure_join_path(base: &str, user_input: &str) -> Option<String> {
 }
 
 
-
+/// extract payload from the request
 pub async fn extract_payload(state: &Arc<AppState>,env_map:&mut HashMap<String,String>,param_map:&mut HashMap<String,String>) {
 
 
@@ -91,6 +96,7 @@ pub async fn extract_payload(state: &Arc<AppState>,env_map:&mut HashMap<String,S
     }
 }
 
+/// read stdout of the command to build logs and send to socket
 pub async fn read_stdout(
     stdout: ChildStdout,
     step: usize,
@@ -158,7 +164,6 @@ pub async fn read_stdout(
                             message: trimmed.to_string(),
                         };
 
-                        println!("{}", trimmed);
 
                         // Buffer log for batch sending
                         buffer.push(log);
@@ -182,6 +187,7 @@ pub async fn read_stdout(
                             build.logs.push(log.clone());
                         }
                     }
+                    drop(current_build);
 
                     if send_to_sock {
                         let json_str = serde_json::to_string(&buffer).unwrap();
@@ -202,6 +208,7 @@ pub async fn read_stdout(
                 build.logs.push(log.clone());
             }
         }
+        drop(current_build);
 
         if send_to_sock {
             let json_str = serde_json::to_string(&buffer).unwrap();
@@ -209,6 +216,8 @@ pub async fn read_stdout(
         }
     }
 }
+
+/// read stderr of the command to build logs and send to socket
 
 pub async fn read_stderr(
     stderr: ChildStderr,
@@ -254,7 +263,6 @@ pub async fn read_stderr(
                             message: trimmed.to_string(),
                         };
 
-                        println!("Error: {}", trimmed);
 
                         // Add log to buffer
                         buffer.push(log);
@@ -278,6 +286,7 @@ pub async fn read_stderr(
                             build.logs.push(log.clone());
                         }
                     }
+                    drop(current_build);
 
                     // Send batch if requested
                     if send_to_sock {
@@ -299,6 +308,7 @@ pub async fn read_stderr(
                 build.logs.push(log.clone());
             }
         }
+        drop(current_build);
         if send_to_sock {
             let json_str = serde_json::to_string(&buffer).unwrap();
             let _ = state.build_sender.send(ChannelMessage::Data(json_str));
@@ -311,7 +321,7 @@ pub async fn read_stderr(
 
 
 
-
+/// replace placeholders in the template with values
 
 pub fn replace_placeholders(template: &str, values: &HashMap<String, String>) -> String {
     let re = Regex::new(r"\{([^}]+)\}").unwrap();
@@ -324,7 +334,7 @@ pub fn replace_placeholders(template: &str, values: &HashMap<String, String>) ->
     }).into_owned()
 }
 
-
+/// save the logs to the log path
 pub async  fn save_log(log_path:&String,logs:String,build_id:String){
 
    
@@ -350,7 +360,7 @@ pub async  fn save_log(log_path:&String,logs:String,build_id:String){
    
 }
 
-
+/// send the logs to the other server
 pub async fn send_to_other_server(path:String,data:String) ->bool{
     
     let client = Client::new();
