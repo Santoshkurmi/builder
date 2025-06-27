@@ -1,7 +1,9 @@
+use crate::helpers::utils::{is_path_exits, read_token_from_user_home};
+
 use super::{config::Config, status::Status};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{collections::HashMap, process::exit};
 use std::sync::Arc;
 use tokio::sync::{
     Mutex,
@@ -99,6 +101,21 @@ pub enum ChannelMessage {
 
 impl AppState {
     pub async fn new(config: Config) -> Self {
+
+        let project_token = read_token_from_user_home(&config.token_path);
+
+        let project_token = match project_token {
+            Ok(token) => Some(token),
+            Err(_) => None,
+        };
+
+        let is_exist = is_path_exits(&config.project.project_path);
+        if !is_exist {
+            println!("Project path does not exist {}", config.project.project_path);
+            exit(500);
+        }
+        
+
         let (project_sender, _) = broadcast::channel::<ChannelMessage>(100);
         let (build_sender, _) = broadcast::channel::<ChannelMessage>(100);
 
@@ -109,7 +126,7 @@ impl AppState {
             build_sender,
             is_queue_running: Arc::new(Mutex::new(false)),
             builds: BuildState::new(),
-            project_token: Arc::new(Mutex::new(None)),
+            project_token: Arc::new(Mutex::new(project_token)),
             project_logs: Arc::new(Mutex::new(Vec::new())),
         }
     }

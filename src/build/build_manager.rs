@@ -61,12 +61,14 @@ pub async fn build_manager(state: web::Data<AppState>) {
         
         {
             let mut project_logs = state.project_logs.lock().await;
-            project_logs.push(project_log);
+            project_logs.push(project_log.clone());
+            let log = serde_json::to_string(&project_log).unwrap();
+            let _ = state.project_sender.send(ChannelMessage::Data(log));
         }
+
 
         run_build(state.clone()).await;
 
-        let _ = state.project_sender.send(ChannelMessage::Data("Build started".to_string()));
         
         
         {

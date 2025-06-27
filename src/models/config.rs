@@ -10,6 +10,7 @@ pub struct Config {
     pub ssl: SslConfig,
     pub auth: AuthConfig,
     pub project: ProjectConfig,
+    pub token_path: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

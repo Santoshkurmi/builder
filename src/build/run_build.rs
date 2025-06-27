@@ -1,6 +1,7 @@
 use std::{collections::HashMap, process::Stdio};
 
 use actix_web::web;
+use chrono::format;
 use tokio::{ process::Command};
 
 use crate::{helpers::utils::{extract_payload, read_stderr, read_stdout, replace_placeholders}, models::{app_state::{ AppState, BuildLog, ChannelMessage, ProjectLog}, config::{CommandConfig}, status::Status}};
@@ -63,8 +64,8 @@ pub async fn run_build(state: web::Data<AppState>) {
 
         let command_with_env = format!("{} && echo '+_+_+_\n' && env", command_with_params);
        
-       
-        let mut child = Command::new("bash")
+       println!("Running command: {}", command_with_env);
+        let  child = Command::new("bash")
             .arg("-c")
             .envs(&env_map)
             .current_dir(state.config.project.project_path.as_str())
@@ -73,8 +74,11 @@ pub async fn run_build(state: web::Data<AppState>) {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .unwrap();
+            ;
+
+         
         
+        let mut child = child.unwrap();
 
         let  stdout = child.stdout.take().unwrap();
         let  stderr = child.stderr.take().unwrap();
@@ -133,7 +137,7 @@ pub async fn run_build(state: web::Data<AppState>) {
 
         
        
-        run_on_success_error_payload(&state, &mut env_map, &mut param_map,&commands).await;
+        run_on_success_error_payload(&state, &mut env_map, &mut param_map,&commands, step).await;
         {
 
             let mut  current_build_guard = state.builds.current_build.lock().await;
@@ -161,10 +165,10 @@ pub async fn run_build(state: web::Data<AppState>) {
 }
 
 
-pub async fn run_on_success_error_payload(state: &web::Data<AppState>,env_map:&mut HashMap<String,String>,param_map:&mut HashMap<String,String>,commands:&Vec<CommandConfig>) {
+pub async fn run_on_success_error_payload(state: &web::Data<AppState>,env_map:&mut HashMap<String,String>,param_map:&mut HashMap<String,String>,commands:&Vec<CommandConfig>,step: usize) {
 
-   
-    let mut step = 1;
+    println!("Running on success error payload");
+    let mut step = step;
     for command in commands {
 
         let  command_with_params = replace_placeholders(&command.command, &param_map);
@@ -172,7 +176,7 @@ pub async fn run_on_success_error_payload(state: &web::Data<AppState>,env_map:&m
         let command_with_env = format!("{} && echo '+_+_+_\n' && env", command_with_params);
         
         
-        let mut child = Command::new("bash")
+        let  child = Command::new("bash")
             .arg("-c")
             .envs(&*env_map)
             .arg( &command_with_env )
@@ -180,7 +184,11 @@ pub async fn run_on_success_error_payload(state: &web::Data<AppState>,env_map:&m
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .unwrap();
+            ;
+
+           
+            
+        let mut child = child.unwrap();
         
 
         let  stdout: tokio::process::ChildStdout = child.stdout.take().unwrap();

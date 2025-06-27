@@ -26,6 +26,45 @@ pub fn generate_token(len: usize) -> String {
         .map(char::from)
         .collect()
 }
+
+pub fn is_path_exits(path: &str) -> bool {
+    Path::new(path).exists()
+}
+
+
+pub fn read_token_from_user_home(relative_path: &str) -> io::Result<String> {
+    let home_dir = dirs::home_dir().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::NotFound, "Could not determine the user home directory")
+    })?;
+
+    let full_path: PathBuf = home_dir.join(Path::new(relative_path));
+
+    // Read and return the file content as String
+    fs::read_to_string(full_path)
+}
+
+
+pub fn save_token_to_user_home(relative_path: &str, content: &str) -> io::Result<()> {
+    // Get the user home directory
+    let home_dir = dirs::home_dir().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::NotFound, "Could not determine the user home directory")
+    })?;
+
+    // Build the full path
+    let full_path: PathBuf = home_dir.join(Path::new(relative_path));
+
+    // Create parent directories if needed
+    if let Some(parent) = full_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    // Write the content to the file
+    fs::write(full_path, content)?;
+
+    Ok(())
+}
+
+
 /// create a file with content and parent directories
 /// if the file already exists, it will be overwritten
 /// if the parent directories do not exist, they will be created

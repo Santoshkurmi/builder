@@ -29,7 +29,7 @@ pub async fn connect_and_stream_ws_build(
     */
     let unique_build_key = &data.config.project.build.unique_build_key;
 
-    let build_id = query.get(unique_build_key).clone(); 
+    // let build_id = query.get(unique_build_key).clone(); 
     let token = query.get("token").clone(); 
     println!("Connecting to build websocket");
     println!("Token: {:?}",token);
@@ -38,10 +38,10 @@ pub async fn connect_and_stream_ws_build(
     }
     // println!("Token: {:?}",token);
 
-    if let None = build_id {
-        return Ok(HttpResponse::Unauthorized().body(format!("No build id found with key {} ",unique_build_key)));
-    }
-    let build_id = build_id.unwrap();
+    // if let None = build_id {
+    //     return Ok(HttpResponse::Unauthorized().body(format!("No build id found with key {} ",unique_build_key)));
+    // }
+    // let build_id = build_id.unwrap();
     let token = token.unwrap();
 
     
@@ -51,14 +51,14 @@ pub async fn connect_and_stream_ws_build(
     let state = data.as_ref().clone();
     // let current_token_lock = state.token.lock().await;
 
-    let current_build = state.builds.current_build.lock().await;
-    if current_build.is_none() {
+    let current_build_guard = state.builds.current_build.lock().await;
+    if current_build_guard.is_none() {
         return Ok(HttpResponse::Unauthorized().body("No build is running"));
     }
-    let current_build  = current_build.as_ref().unwrap();
-    if &current_build.unique_id != build_id {
-        return Ok(HttpResponse::Unauthorized().body("Invalid build id"));
-    }
+    let current_build  = current_build_guard.as_ref().unwrap();
+    // if &current_build.unique_id != build_id {
+    //     return Ok(HttpResponse::Unauthorized().body("Invalid build id"));
+    // }
     // if &current_build.socket_token != token {
     //     return Ok(HttpResponse::Unauthorized().body("Invalid token"));
     // }
@@ -70,6 +70,7 @@ pub async fn connect_and_stream_ws_build(
     // Send old buffered messages first
     {
         let buf = current_build.logs.clone();
+        drop(current_build_guard);
         let json_array = serde_json::to_string(&*buf).unwrap();
         // for line in buf.iter() {
             let _ = session.text(json_array).await;

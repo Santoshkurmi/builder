@@ -20,29 +20,31 @@ pub async fn connect_and_stream_ws_project(
     // |--------------------------------------------------------------------------
     // |
     // */
-    // let token = query.get("token").clone(); 
+    let token = query.get("token").clone(); 
    
 
 
 
-    // if token.is_none() {
-    //     return Ok(HttpResponse::Unauthorized().body("Missing token"));
-    // }
+    if token.is_none() {
+        return Ok(HttpResponse::Unauthorized().body("Missing token"));
+    }
 
-    // let token = token.unwrap();
+    let token = token.unwrap();
 
     let state = data.as_ref().clone();
     // // let current_token_lock = state.token.lock().await;
 
-    // let project_token_guard = state.project_token.lock().await;
-    // if project_token_guard.is_none() {
-    //     return Ok(HttpResponse::Unauthorized().body("Invalid Token"));
-    // }
-    // let project_token  = project_token_guard.as_ref().unwrap();
+    let project_token_guard = state.project_token.lock().await;
+    if project_token_guard.is_none() {
+        return Ok(HttpResponse::Unauthorized().body("Invalid Token"));
+    }
+    let project_token  = project_token_guard.as_ref().unwrap();
     
-    // if project_token != token {
-    //     return Ok(HttpResponse::Unauthorized().body("Invalid token"));
-    // }
+    if project_token != token {
+        return Ok(HttpResponse::Unauthorized().body("Invalid token"));
+    }
+
+    drop(project_token_guard);
 
     // drop(project_token_guard);
     println!("Connecting to project websocket");
